@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+    api:
+        image: rooftopenergy/frontend-assessment:v1.0.1
+        env_file: .env
+        ports:
+            - "8000:8000"
+        depends_on:
+            - migrate
+        networks:
+            - app
+
+    migrate:
+        image: rooftopenergy/frontend-assessment:v1.0.1
+        env_file: .env
+        depends_on:
+            - db
+        command: >
+            sh -c "until pg_isready -h db -p 5432; do sleep 1; done &&
+                   uv run alembic upgrade head"
+        networks:
+            - app
+
+    db:
+        image: postgres:16-alpine
+        environment:
+            POSTGRES_USER: ${DATABASE_USER}
+            POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+            POSTGRES_DB: ${DATABASE_NAME}
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        networks:
+            - app
+
+volumes:
+    pgdata:
+
+networks:
+    app:
+        driver: bridge
