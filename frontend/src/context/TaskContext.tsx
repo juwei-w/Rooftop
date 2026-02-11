@@ -43,7 +43,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             setLoading(true);
             const data = await api.getTasks();
-            setTasks(data);
+            // Propagate through ALL tasks to ensure consistency with backend data
+            await propagateUpdates(data.map(t => t.id), data);
             setError(null);
         } catch (err) {
             setError('Failed to fetch tasks');
@@ -78,10 +79,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const shouldBeBlocked = isBlocked(task, tasksMap);
             let newState = task.state;
 
+            // If should be blocked, set to BLOCKED
             if (shouldBeBlocked && task.state !== TaskState.BLOCKED) {
                 newState = TaskState.BLOCKED;
             } else if (!shouldBeBlocked && task.state === TaskState.BLOCKED) {
-                // If unblocked, revert to TODO (Default actionable state)
+                // If should not be blocked, set to TODO (Default actionable state)
                 newState = TaskState.TODO;
             }
 
@@ -101,43 +103,9 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                 }
             } else {
-                // Even if I didn't change, my state might affect my dependents?
-                // No, if I didn't change, my dependents don't need update.
-                // Wait, if I was passed in 'initialIds' because I changed (externally),
-                // I should queue my dependents regardless of whether I changed *again* here.
-                // But 'propagateUpdates' is usually called *after* a change.
-                // If I am in 'initialIds', it means I need evaluation.
-                // If my state is already correct (e.g. TODO), I don't change.
-                // BUT my dependents might depend on my *current* state.
-                // If I transitioned TODO->DONE before calling this, and passed myself as initialId...
-                // Then `newState === task.state` (DONE).
-                // I returned DONE. 
-                // Dependents need to know I am DONE.
-                // So I MUST queue dependents if I am in initialIds OR if I changed.
-                // Improved logic: If taskId is in initialIds, forcing check of dependents is handled by caller logic?
-                // No. Caller passes "Tasks that changed".
-                // So if I am in queue, I should probably check my dependents?
-                // Wait, if I am in queue, it means *my* blockers might have changed.
-                // If my state remains same, my dependents don't need update.
-                // EXCEPTION: The caller changed me (DONE) and wants me to propagate.
-                // In that case, `newState` (calc) vs `task.state` (current).
-                // If I am DONE, `isBlocked` is false (assumed not blocked).
-                // `newState` = DONE.
-                // `task.state` = DONE.
-                // No change detected. dependents NOT queued.
-                // BUG!
-                // Fix: `propagateUpdates` should take `initialIds` as "Tasks that definitely changed/need eval".
-                // Actually, better:
-                // `updateTask` -> Updates local -> calls `propagateUpdates([id])`.
-                // Inside `propagateUpdates`:
-                // We assume tasks in `initialIds` MIGHT have changed recently.
-                // BUT we need to trigger their dependents.
-                // So: split logic.
-                // Or just `queue.push(...task.dependents)` for all visited tasks?
-                // Yes, structurally safer. If I visit T, I check T's dependents.
-                // Optimized: Only if T's state is "meaningful" for dependents (DONE vs NOT DONE).
-                // Simplest: If I visit T, I check its dependents.
-                // `visited` prevents loops.
+                // Even if my state didn't change *here*, I might have been queued because
+                // I changed *before* calling propagateUpdates (e.g. manual user action).
+                // So my dependents need to re-evaluate based on my current state.
 
                 for (const depId of task.dependents) {
                     if (!visited.has(depId)) queue.push(depId);
@@ -156,8 +124,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const createTask = async (payload: CreateTaskPayload) => {
         try {
-            const newTask = await api.createTask(payload);
-            setTasks(prev => [...prev, newTask]);
+            await api.createTask(payload);
+            await refreshTasks(); // Refresh to ensure ID and order
         } catch (err) {
             console.error(err);
             throw err;
@@ -190,9 +158,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // (Backend manages the edges)
             const data = await api.getTasks();
 
-            // 3. Propagate
-            // Adding a blocker might block 'taskId'. So we evaluate 'taskId'.
-            await propagateUpdates([taskId], data);
+            // 3. Propagate ALL tasks to ensure total consistency
+            await propagateUpdates(data.map(t => t.id), data);
         } catch (err) {
             console.error(err);
             throw err;
@@ -204,8 +171,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await api.removeDependency(taskId, blockerId);
             const data = await api.getTasks();
 
-            // Removing a blocker might unblock 'taskId'. Evaluate 'taskId'.
-            await propagateUpdates([taskId], data);
+            // Propagate ALL tasks to ensure total consistency
+            await propagateUpdates(data.map(t => t.id), data);
         } catch (err) {
             console.error(err);
             throw err;
@@ -216,17 +183,8 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             await api.deleteTask(id);
             const data = await api.getTasks();
-            // Deleting a task might unblock its dependents.
-            // Since we don't know who depended on it (it's gone),
-            // We rely on the fresh 'data'.
-            // We should ideally evaluate ALL tasks, or at least those that were blocked.
-            // For safety/simplicity, let's evaluate ALL blocked tasks.
-            const blockedTasks = data.filter(t => t.state === TaskState.BLOCKED).map(t => t.id);
-            if (blockedTasks.length > 0) {
-                await propagateUpdates(blockedTasks, data);
-            } else {
-                setTasks(data);
-            }
+            // Validate all remaining tasks
+            await propagateUpdates(data.map(t => t.id), data);
         } catch (err) {
             console.error(err);
             throw err;
