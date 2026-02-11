@@ -26,7 +26,7 @@ A React + TypeScript application for managing tasks with complex dependency logi
 ## 🏗 Architecture & Logic
 
 ### State Management
-The application uses a **Context-based architecture** (`TaskContext`) to manage global state. This was chosen for simplicity and effectiveness, as per the assessment constraints. 
+The application uses a **Context-based architecture** (`TaskContext`) to manage global state. This was chosen for simplicity and effectiveness. 
 
 ### Dependency Propagation
 The core challenge was implementing the **Recursive Propagation** of task states. Since the backend acts as a simple store without business logic for propagation, the frontend handles this responsibility.
