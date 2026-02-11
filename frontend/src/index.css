@@ -232,6 +232,11 @@ select:focus {
   outline-offset: -1px;
 }
 
+select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* Custom Utilities mimicking Tailwind */
 .min-h-screen {
   min-height: 100vh;
