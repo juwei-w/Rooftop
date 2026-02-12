@@ -1,0 +1,19 @@
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Build Output
+dist/
+out/
+build/
+
+# Docker
+docker-compose.override.yml
