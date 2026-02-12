@@ -3,7 +3,7 @@
 
 A React + TypeScript application for managing tasks with complex dependency logic.
 
-[**Watch the Demo Video**](https://youtu.be/2KIpCbLJXLM)
+Video Demo: https://youtu.be/2KIpCbLJXLM
 
 ## 🚀 Getting Started
 
